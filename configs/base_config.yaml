@@ -1,0 +1,16 @@
+data:
+  DB_dir: "data/all_emb_1"
+  mask: "id1"
+  min_hh_size: 2
+  max_hh_size: 8
+  household_size: 500
+  hh_num: 1000
+  guests_per_hh: 250
+  enrollment_utt: 4
+  evaluation_utt: 10
+  random_batch : false
+scoring_model:
+  input_dropout_rate: 0.5
+  adaptation_input_features: 256
+  adaptation_output_features: 32
+  use_bias: true

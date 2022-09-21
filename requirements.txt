@@ -9,3 +9,5 @@ pyyaml
 SoundFile
 tqdm
 sklearn
+pydantic
+yaml
