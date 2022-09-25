@@ -10,4 +10,4 @@ class Loss(nn.Module):
         coef = 1 / (positive_scores.size()[0] + negative_scores.size()[0])
         compensation_weight = negative_scores.size()[0] / positive_scores.size()[0]
         return -coef * (compensation_weight * torch.sum(torch.log(positive_scores)) +
-                        torch.sum(torch.log(negative_scores)))
+                        torch.sum(torch.log(1-negative_scores)))
