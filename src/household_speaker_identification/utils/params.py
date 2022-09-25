@@ -28,6 +28,9 @@ class ScoringModelParams(BaseModelForbidExtraAttrs):
 class TrainingParams(BaseModelForbidExtraAttrs):
     batch_size: int
     epoch_num: int
+    learning_rate: float
+    num_workers: int
+
 
 class Params(BaseModelForbidExtraAttrs):
     train_data: DataParams
