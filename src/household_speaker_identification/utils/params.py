@@ -1,10 +1,10 @@
 import pydantic as pydantic
 
 
-
 class BaseModelForbidExtraAttrs(pydantic.BaseModel):
     class Config:
         extra = "forbid"
+
 
 class DataParams(BaseModelForbidExtraAttrs):
     DB_dir: str
@@ -25,6 +25,12 @@ class ScoringModelParams(BaseModelForbidExtraAttrs):
     use_bias: pydantic.StrictBool
 
 
+class TrainingParams(BaseModelForbidExtraAttrs):
+    batch_size: int
+    epoch_num: int
+
 class Params(BaseModelForbidExtraAttrs):
-    data: DataParams
+    train_data: DataParams
+    eval_data: DataParams
     scoring_model: ScoringModelParams
+    training: TrainingParams
