@@ -29,33 +29,33 @@ def train(params: Params, train_loader, eval_loader, writer):
     criterion = Loss()
     print("Train is starting")
     global_iter = 0
-    global_val_iter = 0
     for epoch in range(params.training.epoch_num):
         print(f"{epoch} epoch started...")
         train_metrics = train_epoch(model, optimizer, criterion, train_loader, writer, global_iter)
         global_iter = train_metrics['global_iter']
 
         writer.add_scalar("train_loss/epoch", train_metrics['epoch_loss'], epoch)
-        writer.add_scalar("train_threshold/epoch", train_metrics['mean_thr'], epoch)
-        writer.add_scalar("train_EER/epoch", train_metrics['mean_eer'], epoch)
+        writer.add_scalar("train_threshold_known/epoch", train_metrics['thr_known'], epoch)
+        writer.add_scalar("train_EER_known/epoch", train_metrics['eer_known'], epoch)
+        writer.add_scalar("train_threshold_unknown/epoch", train_metrics['thr_unknown'], epoch)
+        writer.add_scalar("train_EER_unknown/epoch", train_metrics['eer_unknown'], epoch)
 
-        eval_metrics = evaluate_epoch(model, eval_loader, writer, global_val_iter)
-        global_val_iter = eval_metrics['global_iter']
-        # print("Time spent to compute global eer:", eval_metrics['time_spent'])
+        eval_metrics = eval(model, eval_loader)
 
-        writer.add_scalar("val_EER/epoch", eval_metrics['mean_eer'], epoch)
-        writer.add_scalar("val_threshold/epoch", eval_metrics['mean_thr'], epoch)
-        # writer.add_scalar("val_EER/epoch", eval_metrics['epoch_loss'], epoch)
-        # writer.add_scalar("val_global_threshold/epoch", eval_metrics['global_threshold'], epoch)
-        # writer.add_scalar("val_global_EER/epoch", eval_metrics['global_eer'], epoch)
+        writer.add_scalar("val_EER_known/epoch", eval_metrics['eer_known'], epoch)
+        writer.add_scalar("val_threshold_known/epoch", eval_metrics['thr_known'], epoch)
+        writer.add_scalar("val_EER_unknown/epoch", eval_metrics['eer_unknown'], epoch)
+        writer.add_scalar("val_threshold_unknown/epoch", eval_metrics['thr_unknown'], epoch)
 
 
 def train_epoch(model, optimizer, criterion, train_loader, writer, global_iter):
     model.train()
     epoch_loss = 0.0
     iteration = 0
-    thresholds = np.array([])
-    eers = np.array([])
+
+    global_scores = torch.tensor([])
+    global_labels = torch.tensor([])
+
     losses = []
     for data in tqdm(train_loader):
         emb1, emb2, labels = data
@@ -66,61 +66,58 @@ def train_epoch(model, optimizer, criterion, train_loader, writer, global_iter):
 
         optimizer.zero_grad()
         scores = model(emb1, emb2)
-        positive_scores = scores[labels == 1]
-        negative_scores = scores[labels == 0]
-        loss = criterion(positive_scores, negative_scores)
+        target_scores = scores[labels == 2]
+        negative_scores = scores[labels != 2]
+        loss = criterion(target_scores, negative_scores)
         loss.backward()
         optimizer.step()
         iteration += 1
         global_iter += 1
-        eer, threshold = compute_eer(positive_scores, negative_scores)
 
-        writer.add_scalar("train_threshold/step", threshold, global_iter)
-        writer.add_scalar("train_EER/step", eer, global_iter)
         writer.add_scalar("train_loss/step", loss, global_iter)
 
-        eers = np.append(eers, eer)
-        thresholds = np.append(thresholds, threshold)
+        global_labels = torch.cat([global_labels, labels.cpu().detach()])
+        global_scores = torch.cat([global_scores, scores.cpu().detach()])
         losses.append(loss.item())
         epoch_loss += (loss.item() - epoch_loss) / iteration
+
+    known_global_scores = global_scores[(global_labels == 2) | (global_labels == 1)]
+    known_global_labels = global_labels[(global_labels == 2) | (global_labels == 1)]
+    unknown_global_scores = global_scores[(global_labels == 2) | (global_labels == 0)]
+    unknown_global_labels = global_labels[(global_labels == 2) | (global_labels == 0)]
+
+    global_eer_known, global_threshold_known = compute_eer(known_global_labels, known_global_scores)
+    global_eer_unknown, global_threshold_unknown = compute_eer(unknown_global_labels, unknown_global_scores)
+
     print("epoch loss = ", epoch_loss)
-    return {"mean_eer": np.mean(eers), "mean_thr": np.mean(thresholds),
+    return {"eer_known": global_eer_known, "thr_known": global_threshold_known,
+            "eer_unknown": global_eer_unknown, "thr_unknown": global_threshold_unknown,
             "global_iter": global_iter, "epoch_loss": epoch_loss}
 
 
-def evaluate_epoch(model, eval_loader, writer, global_iter):
+def eval(model, eval_loader):
     model.eval()
-    thresholds = np.array([])
-    eers = np.array([])
-    # global_scores = np.array([])
-    # global_labels = np.array([])
-
+    global_scores = torch.tensor([])
+    global_labels = torch.tensor([])
     for data in eval_loader:
         emb1, emb2, labels = data
         batch_size = emb1.shape[0]
         emb1 = emb1.view(batch_size, -1).cuda()
         emb2 = emb2.view(batch_size, -1).cuda()
-        labels = labels.cuda()
         scores = model(emb1, emb2)
-        positive_scores = scores[labels == 1]
-        negative_scores = scores[labels == 0]
-        eer, threshold = compute_eer(positive_scores, negative_scores)
+        global_labels = torch.cat([global_labels, labels])
+        global_scores = torch.cat([global_scores, scores.cpu().detach()])
 
-        writer.add_scalar("val_EER/step", eer, global_iter)
-        writer.add_scalar("val_threshold/step", threshold, global_iter)
-        # global_scores = np.append(global_scores, scores)
-        # global_labels = np.append(global_labels, labels)
-        eers = np.append(eers, eer)
-        thresholds = np.append(thresholds, threshold)
-        global_iter += 1
-    # print("Started computing global scores")
-    # start_time = time.time()
-    # positive_scores = global_scores[global_labels == 1]
-    # negative_scores = global_scores[global_labels == 0]
-    # global_eer, global_threshold = compute_eer(positive_scores, negative_scores)
-    # end_time = time.time()
-    return {"mean_eer": np.mean(eers), "mean_thr": np.mean(thresholds), "global_iter": global_iter}
-            # "time_spent": (end_time-start_time)/1000, "global_eer": global_eer, "global_threshold": global_threshold}
+    known_global_scores = global_scores[(global_labels == 2) | (global_labels == 1)]
+    known_global_labels = global_labels[(global_labels == 2) | (global_labels == 1)]
+    unknown_global_scores = global_scores[(global_labels == 2) | (global_labels == 0)]
+    unknown_global_labels = global_labels[(global_labels == 2) | (global_labels == 0)]
+
+    global_eer_known, global_threshold_known = compute_eer(known_global_labels, known_global_scores)
+    global_eer_unknown, global_threshold_unknown = compute_eer(unknown_global_labels, unknown_global_scores)
+
+    return {"eer_known": global_eer_known, "thr_known": global_threshold_known,
+            "eer_unknown": global_eer_unknown, "thr_unknown": global_threshold_unknown}
 
 
 def main():
@@ -132,16 +129,20 @@ def main():
     train_dataset = DataSetLoader(params.train_data)
     eval_dataset = DataSetLoader(params.eval_data)
     writer = SummaryWriter()
+    print("Data load started")
     train_loader = DataLoader(
         train_dataset,
         batch_size=params.training.batch_size,
-        num_workers=params.training.num_workers
+        num_workers=params.training.num_workers,
+        pin_memory=True
     )
     eval_loader = DataLoader(
         eval_dataset,
         batch_size=params.training.batch_size,
-        num_workers=params.training.num_workers
+        num_workers=params.training.num_workers,
+        pin_memory=True
     )
+    print("Training started")
     train(params, train_loader, eval_loader, writer)
     writer.flush()
     writer.close()

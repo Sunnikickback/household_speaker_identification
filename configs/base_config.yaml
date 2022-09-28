@@ -1,5 +1,7 @@
 train_data:
   DB_dir: "../data/all_emb_1"
+  path_to_households: "../data/households/"
+  saved_data: "../data/all_data_in_one.npy"
   min_hh_size: 2
   max_hh_size: 8
   household_size: 500
@@ -10,6 +12,8 @@ train_data:
   random_batch : false
 eval_data:
   DB_dir: "../data/all_emb_1"
+  path_to_households: "../data/households/"
+  saved_data: "../data/all_data_in_one.npy"
   min_hh_size: 2
   max_hh_size: 4
   household_size: 250
@@ -26,5 +30,5 @@ scoring_model:
 training:
   batch_size: 1000
   epoch_num: 10
-  num_workers: 16
+  num_workers: 8
   learning_rate: 1e-2

@@ -16,6 +16,8 @@ class DataParams(BaseModelForbidExtraAttrs):
     enrollment_utt: int
     evaluation_utt: int
     random_batch: pydantic.StrictBool
+    saved_data: str = None
+    path_to_households: str = None
 
 
 class ScoringModelParams(BaseModelForbidExtraAttrs):
