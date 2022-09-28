@@ -1,4 +1,5 @@
 import pydantic as pydantic
+from pydantic import typing
 
 
 class BaseModelForbidExtraAttrs(pydantic.BaseModel):
@@ -34,8 +35,15 @@ class TrainingParams(BaseModelForbidExtraAttrs):
     num_workers: int
 
 
+class ContinueFromParams(BaseModelForbidExtraAttrs):
+    model_path: str
+
+
 class Params(BaseModelForbidExtraAttrs):
-    train_data: DataParams
+    train_data: DataParams = None
     eval_data: DataParams
-    scoring_model: ScoringModelParams
-    training: TrainingParams
+    scoring_model: ScoringModelParams = None
+    training: TrainingParams = None
+    continue_from: typing.Optional[ContinueFromParams]
+    only_validate: bool = False
+

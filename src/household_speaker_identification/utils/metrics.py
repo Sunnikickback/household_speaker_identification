@@ -1,4 +1,3 @@
-import torch
 from scipy.interpolate import interp1d
 from scipy.optimize import brentq
 from sklearn.metrics import roc_curve

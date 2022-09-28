@@ -1,12 +1,12 @@
 import argparse
-import time
 
-import numpy as np
 import torch
 from torch.utils.data import DataLoader
 import yaml
 
 from torch.utils.tensorboard import SummaryWriter
+
+from household_speaker_identification.models.cosine_model import CosineModel
 from household_speaker_identification.models.scoring_model import ScoringModel
 from household_speaker_identification.utils.dataloader import DataSetLoader
 from household_speaker_identification.utils.loss import Loss
@@ -19,11 +19,11 @@ from tqdm import tqdm
 def build_argument_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_yaml", type=str)
+    parser.add_argument("--model_type", type=str)
     return parser
 
 
-def train(params: Params, train_loader, eval_loader, writer):
-    model = ScoringModel(params.scoring_model).cuda()
+def train(params: Params, model, train_loader, eval_loader, writer):
 
     optimizer = Adam(parameters=model.parameters(), lr=params.training.learning_rate)
     criterion = Loss()
@@ -126,24 +126,36 @@ def main():
     with open(args.config_yaml, "r") as stream:
         config = yaml.safe_load(stream)
     params = Params(**config)
-    train_dataset = DataSetLoader(params.train_data)
-    eval_dataset = DataSetLoader(params.eval_data)
+    if args.model is "scoring_model":
+        model = ScoringModel(params.scoring_model)
+    else:
+        model = CosineModel()
+
+    model = model.cuda()
+
     writer = SummaryWriter()
-    print("Data load started")
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=params.training.batch_size,
-        num_workers=params.training.num_workers,
-        pin_memory=True
-    )
+
+    eval_dataset = DataSetLoader(params.eval_data)
     eval_loader = DataLoader(
         eval_dataset,
         batch_size=params.training.batch_size,
         num_workers=params.training.num_workers,
         pin_memory=True
     )
-    print("Training started")
-    train(params, train_loader, eval_loader, writer)
+
+    if not params.only_validate:
+        train_dataset = DataSetLoader(params.train_data)
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=params.training.batch_size,
+            num_workers=params.training.num_workers,
+            pin_memory=True
+        )
+        train(params, model, train_loader, eval_loader, writer)
+    eval_metrics = eval(model, eval_loader)
+    print("Eval metrics:")
+    print(f"eer_known = {eval_metrics['eer_known']}; thr_known = {eval_metrics['thr_known']}")
+    print(f"eer_unknown = {eval_metrics['eer_unknown']}; thr_unknown = {eval_metrics['thr_unknown']}")
     writer.flush()
     writer.close()
 
