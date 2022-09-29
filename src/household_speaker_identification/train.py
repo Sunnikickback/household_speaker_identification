@@ -31,21 +31,19 @@ def train(params: Params, model, train_loader, eval_loader, writer):
     global_iter = 0
     for epoch in range(params.training.epoch_num):
         print(f"{epoch} epoch started...")
+
         train_metrics = train_epoch(model, optimizer, criterion, train_loader, writer, global_iter)
         global_iter = train_metrics['global_iter']
-
-        writer.add_scalar("train_loss/epoch", train_metrics['epoch_loss'], epoch)
-        writer.add_scalar("train_threshold_known/epoch", train_metrics['thr_known'], epoch)
-        writer.add_scalar("train_EER_known/epoch", train_metrics['eer_known'], epoch)
-        writer.add_scalar("train_threshold_unknown/epoch", train_metrics['thr_unknown'], epoch)
-        writer.add_scalar("train_EER_unknown/epoch", train_metrics['eer_unknown'], epoch)
+        train_metrics.pop('global_iter')
+        write_summary(writer, train_metrics, epoch, 'train')
 
         eval_metrics = eval(model, eval_loader)
+        write_summary(writer, eval_metrics, epoch, 'val')
 
-        writer.add_scalar("val_EER_known/epoch", eval_metrics['eer_known'], epoch)
-        writer.add_scalar("val_threshold_known/epoch", eval_metrics['thr_known'], epoch)
-        writer.add_scalar("val_EER_unknown/epoch", eval_metrics['eer_unknown'], epoch)
-        writer.add_scalar("val_threshold_unknown/epoch", eval_metrics['thr_unknown'], epoch)
+
+def write_summary(writer, metrics, epoch, mode:str):
+    for keys in metrics.keys():
+        writer.add_scalar(f"{mode}_{keys}/epoch", metrics[keys], epoch)
 
 
 def train_epoch(model, optimizer, criterion, train_loader, writer, global_iter):
@@ -88,10 +86,11 @@ def train_epoch(model, optimizer, criterion, train_loader, writer, global_iter):
 
     global_eer_known, global_threshold_known = compute_eer(known_global_labels, known_global_scores)
     global_eer_unknown, global_threshold_unknown = compute_eer(unknown_global_labels, unknown_global_scores)
-
+    global_eer, global_threshold = compute_eer(global_labels, global_scores)
     print("epoch loss = ", epoch_loss)
     return {"eer_known": global_eer_known, "thr_known": global_threshold_known,
             "eer_unknown": global_eer_unknown, "thr_unknown": global_threshold_unknown,
+            "eer": global_eer, "thr": global_threshold,
             "global_iter": global_iter, "epoch_loss": epoch_loss}
 
 
@@ -104,7 +103,7 @@ def eval(model, eval_loader):
         batch_size = emb1.shape[0]
         emb1 = emb1.view(batch_size, -1).cuda()
         emb2 = emb2.view(batch_size, -1).cuda()
-        scores = model(emb1, emb2)
+        scores = model(emb1, emb2, training=False)
         global_labels = torch.cat([global_labels, labels])
         global_scores = torch.cat([global_scores, scores.cpu().detach()])
 
@@ -113,11 +112,13 @@ def eval(model, eval_loader):
     unknown_global_scores = global_scores[(global_labels == 2) | (global_labels == 0)]
     unknown_global_labels = global_labels[(global_labels == 2) | (global_labels == 0)]
 
+    global_eer, global_threshold = compute_eer(global_labels, global_scores)
     global_eer_known, global_threshold_known = compute_eer(known_global_labels, known_global_scores)
     global_eer_unknown, global_threshold_unknown = compute_eer(unknown_global_labels, unknown_global_scores)
 
     return {"eer_known": global_eer_known, "thr_known": global_threshold_known,
-            "eer_unknown": global_eer_unknown, "thr_unknown": global_threshold_unknown}
+            "eer_unknown": global_eer_unknown, "thr_unknown": global_threshold_unknown,
+            "eer": global_eer, "thr": global_threshold}
 
 
 def main():
@@ -126,9 +127,10 @@ def main():
     with open(args.config_yaml, "r") as stream:
         config = yaml.safe_load(stream)
     params = Params(**config)
-    if args.model is "scoring_model":
+    if args.model_type == "scoring_model":
         model = ScoringModel(params.scoring_model)
     else:
+        params.only_validate = True
         model = CosineModel()
 
     model = model.cuda()
@@ -149,13 +151,16 @@ def main():
             train_dataset,
             batch_size=params.training.batch_size,
             num_workers=params.training.num_workers,
-            pin_memory=True
+            pin_memory=True,
+            shuffle=False
         )
         train(params, model, train_loader, eval_loader, writer)
     eval_metrics = eval(model, eval_loader)
     print("Eval metrics:")
     print(f"eer_known = {eval_metrics['eer_known']}; thr_known = {eval_metrics['thr_known']}")
     print(f"eer_unknown = {eval_metrics['eer_unknown']}; thr_unknown = {eval_metrics['thr_unknown']}")
+    print(f"eer = {eval_metrics['eer']}; thr = {eval_metrics['thr']}")
+
     writer.flush()
     writer.close()
 

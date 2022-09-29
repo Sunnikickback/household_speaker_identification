@@ -6,6 +6,6 @@ class CosineModel(nn.Module):
         super(CosineModel, self).__init__()
         self.cosine_similarity = nn.CosineSimilarity()
 
-    def forward(self, emb1, emb2):
+    def forward(self, emb1, emb2, training=True):
         cosine_sim_scores = self.cosine_similarity(emb1, emb2).reshape(-1, 1)
         return cosine_sim_scores

@@ -26,53 +26,20 @@ def get_folder_name_by_ind(ind, mask, user_folders):
     return mask + str(ind) if user_folders is None else user_folders[ind]
 
 
-def generate_households(data_params: DataParams):
-    user_folders = os.listdir(data_params.DB_dir)
-
-    utt_count = np.array([len(os.listdir(os.path.join(data_params.DB_dir, id))) for id in user_folders])
-    set_of_utts = np.arange(sum(utt_count)).astype(int)
-    households = []
-    num_unique_users = len(os.listdir(data_params.DB_dir))
-    for memb_num in np.random.randint(data_params.min_hh_size, data_params.max_hh_size, data_params.hh_num):
-        used_utterances = np.array([])
-        pos_utts = np.array([])
-        members = np.sort(np.random.choice(np.arange(num_unique_users), memb_num, replace=False))
-        for member_id in members:
-            assert utt_count[member_id] >= data_params.enrollment_utt
-            assert utt_count[member_id] >= data_params.evaluation_utt + data_params.enrollment_utt
-            enrol_utts = np.sort(np.random.choice(np.arange(utt_count[member_id]),
-                                                  data_params.enrollment_utt, replace=False))
-
-            used_utterances = np.append(used_utterances,
-                                        np.array(list(map(lambda num: get_utt_num_by_pos(member_id, num, utt_count),
-                                                          enrol_utts)))).astype(int)
-            pos_utts_tmp = np.random.choice(np.delete(np.arange(utt_count[member_id]), enrol_utts),
-                                                            data_params.evaluation_utt, replace=False).astype(int)
-            pos_utts = np.append(pos_utts,
-                                 np.array(list(map(lambda num:
-                                                   get_utt_num_by_pos(member_id, num, utt_count), pos_utts_tmp))))
-
-        guests = np.sort(np.random.choice(np.delete(set_of_utts, used_utterances), data_params.guests_per_hh))
-        guests_with_eval = np.append(guests, np.random.choice(pos_utts,
-                                                              data_params.household_size -
-                                                              data_params.guests_per_hh -
-                                                              len(pos_utts)))
-        households.append((used_utterances, guests_with_eval, pos_utts, members))
-
-    return households, utt_count, user_folders
-
-
 class DataSetLoader(Dataset):
     def __init__(self, params: DataParams):
         super(DataSetLoader, self).__init__()
         self.params = params
-        self.households, self.utt_count, self.user_folders = generate_households(self.params)
         self.member_nums = []
         self.data_list_emb1 = np.array([])
         self.data_list_emb2 = np.array([])
         self.data_list_labels = np.array([])
 
+        self.user_folders = os.listdir(self.params.DB_dir)
+        self.utt_count = np.array([len(os.listdir(os.path.join(self.params.DB_dir, id))) for id in self.user_folders])
+
         if params.path_to_households is None or not os.path.exists(os.path.join(params.path_to_households, "emb1.npy")):
+            self.households = self.generate_households()
             for (household, guests, pos_utts, member_ids) in self.households:
                 emb1, emb2, labels = self.generate_pairs(household, guests, pos_utts, member_ids)
 
@@ -85,7 +52,6 @@ class DataSetLoader(Dataset):
                 self.data_list_emb1 = np.append(self.data_list_emb1, emb1)
                 self.data_list_emb2 = np.append(self.data_list_emb2, emb2)
                 self.data_list_labels = np.append(self.data_list_labels, labels)
-
             if params.path_to_households is not None:
                 if not os.path.exists(params.path_to_households):
                     os.mkdir(params.path_to_households)
@@ -116,6 +82,39 @@ class DataSetLoader(Dataset):
             np.save("../data/all_data_in_one.npy", self.all_data)
         else:
             self.all_data = np.load(params.saved_data)
+
+    def generate_households(self):
+        set_of_utts = np.arange(sum(self.utt_count)).astype(int)
+        households = []
+        num_unique_users = len(os.listdir(self.params.DB_dir))
+        for memb_num in np.random.randint(self.params.min_hh_size, self.params.max_hh_size, self.params.hh_num):
+            used_utterances = np.array([])
+            pos_utts = np.array([])
+            members = np.sort(np.random.choice(np.arange(num_unique_users), memb_num, replace=False))
+            for member_id in members:
+                assert self.utt_count[member_id] >= self.params.enrollment_utt
+                assert self.utt_count[member_id] >= self.params.evaluation_utt + self.params.enrollment_utt
+                enrol_utts = np.sort(np.random.choice(np.arange(self.utt_count[member_id]),
+                                                      self.params.enrollment_utt, replace=False))
+
+                used_utterances = np.append(used_utterances,
+                                            np.array(list(map(lambda num: get_utt_num_by_pos(member_id,
+                                                                                             num, self.utt_count),
+                                                              enrol_utts)))).astype(int)
+                pos_utts_tmp = np.random.choice(np.delete(np.arange(self.utt_count[member_id]), enrol_utts),
+                                                self.params.evaluation_utt, replace=False).astype(int)
+                pos_utts = np.append(pos_utts,
+                                     np.array(list(map(lambda num: get_utt_num_by_pos(member_id, num, self.utt_count),
+                                                       pos_utts_tmp))))
+
+            guests = np.sort(np.random.choice(np.delete(set_of_utts, used_utterances), self.params.guests_per_hh))
+            guests_with_eval = np.append(guests, np.random.choice(pos_utts,
+                                                                  self.params.household_size -
+                                                                  self.params.guests_per_hh -
+                                                                  len(pos_utts)))
+            households.append((used_utterances, guests_with_eval, pos_utts, members))
+
+        return households
 
     def generate_pairs(self, household, guests, pos_utts, member_ids):
         num_members = len(household) // self.params.enrollment_utt

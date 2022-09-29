@@ -1,6 +1,6 @@
 train_data:
   DB_dir: "../data/all_emb_1"
-  path_to_households: "../data/households/"
+  path_to_households: "../data/households_train/"
   saved_data: "../data/all_data_in_one.npy"
   min_hh_size: 2
   max_hh_size: 8
@@ -12,10 +12,10 @@ train_data:
   random_batch : false
 eval_data:
   DB_dir: "../data/all_emb_1"
-  path_to_households: "../data/households/"
+  path_to_households: "../data/households_eval/"
   saved_data: "../data/all_data_in_one.npy"
   min_hh_size: 2
-  max_hh_size: 4
+  max_hh_size: 5
   household_size: 250
   hh_num: 1000
   guests_per_hh: 125
@@ -27,9 +27,10 @@ scoring_model:
   adaptation_input_features: 256
   adaptation_output_features: 32
   use_bias: true
+  dropout_type: "sync"
 training:
   batch_size: 1000
   epoch_num: 10
   num_workers: 8
   learning_rate: 1e-2
-only_validate: True
+only_validate: False

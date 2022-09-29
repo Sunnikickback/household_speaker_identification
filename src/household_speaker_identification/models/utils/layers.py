@@ -4,6 +4,30 @@ import torch
 from torch import nn
 
 
+class SyncDropout(nn.Module):
+    def __init__(self, dropout_rate, in_features):
+        super().__init__()
+        self.dropout_rate = dropout_rate
+        self.in_features = in_features
+
+    def forward(self, emb1, emb2):
+        indices = torch.randperm(self.in_features)[:int((1-self.dropout_rate) * self.in_features)]
+        emb1[indices] = 0
+        emb2[indices] = 0
+        return emb1, emb2
+
+
+class OriginalDropout(nn.Module):
+    def __init__(self, dropout_rate):
+        super().__init__()
+        self.dropout = nn.Dropout(dropout_rate)
+
+    def forward(self, emb1, emb2):
+        emb1 = self.dropout(emb1)
+        emb2 = self.dropout(emb2)
+        return emb1, emb2
+
+
 class LinearScorer(nn.Module):
     """ Custom Linear layer but mimics a standard linear layer """
     def __init__(self):
